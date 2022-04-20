@@ -1,4 +1,3 @@
-library(treekoR)
 library(SingleCellExperiment)
 library(dplyr)
 library(zellkonverter)
@@ -8,6 +7,8 @@ library(readr)
 library(sva)
 library(ggplot2)
 library(ggpubr)
+source('src/treekoR_src/analyseTree.R')
+source('src/treekoR_src/visualiseTree.R')
 '%nin%' <-Negate('%in%') 
 
 sample_info <- read_csv('/Users/tan/preterm_DHA/data/refined_fileInfo.csv')
@@ -124,6 +125,7 @@ if (file.exists(paste0(flowSOM_data_path, '.gz'))){
 }
 
 for (time_point in c('Day 1', 'Day 3', 'Day 7', 'Day 14', 'Day 28', 'PMA 40 weeks')){
+  #time_point = 'Day 1'
   #  data_dir = './PAGA_result_data/'
   #  sub_names <- sapply(dir(path=data_dir), 
   #                      function(x){strsplit(x,split = '_')[[1]][2]})
@@ -170,9 +172,46 @@ for (time_point in c('Day 1', 'Day 3', 'Day 7', 'Day 14', 'Day 28', 'PMA 40 week
   exprs <- data[,common_marker]
   meta <- data %>% select(!all_of(common_marker)) 
   
-  clust_tree <- getClusterTree(exprs = exprs,
-                               clusters = meta$cluster,
-                               hierarchy_method = "hopach")
+  #clust_tree0 <- getClusterTree(exprs = exprs,
+  #                             clusters = meta$cluster,
+  #                             hierarchy_method = "hopach")
+  ##### fix the tree-------------------------------------------------------------------------------------------
+  # calculate median marker expression
+  clust_med_dt = data.table::as.data.table(exprs)
+  clust_med_dt[, cluster_id := meta$cluster]
+  res = clust_med_dt[, lapply(.SD, median, na.rm=TRUE), by=cluster_id]
+  res2 = res[,.SD, .SDcols = !c('cluster_id')]
+  rownames(res2) = res[["cluster_id"]]
+  res_unscaled = res2
+  res2[, (colnames(res2)) := lapply(.SD, scale), .SDcols=colnames(res2)]
+  
+  # label the position of cell clusters in the tree
+  cell_level3 = unique(rownames(res2))
+  cell_level2 = lapply(strsplit(cell_level3,'-'),function(x){x[1]}) %>% unlist()
+  cell_order = data.frame(cell_level2 = unique(cell_level2), node = 1:length(unique(cell_level2)))
+  cell_nodes = cell_order %>% right_join(data.frame(cell_level2 = cell_level2, cell_level3 = cell_level3))
+  
+  cutree_1 = rep(1,length(cell_level3))
+  names(cutree_1) = 1:length(cell_level3)
+  cutree_2 = cell_nodes$node
+  names(cutree_2) = 1:length(cell_level3)
+  cutree_3 = 1:length(cell_level3)
+  names(cutree_3) = 1:length(cell_level3)
+  cutree_list = list(cutree_1, cutree_2, cutree_3)
+  hp_dend = list()
+  hp_dend$cutree_list = cutree_list
+  
+  # generate phylogram
+  hc_phylo = hopachToPhylo(hp_dend)
+  hc_phylo$tip.label = rownames(res2)[as.numeric(hc_phylo$tip.label)]
+  
+  clust_tree=list(
+    median_freq = res_unscaled,
+    clust_tree = hc_phylo
+  )
+  
+  #####----------------------------------------------------------------------------------------------------------------
+  
   tested_tree <- testTree(phylo = clust_tree$clust_tree,
                           clusters = meta$cluster,
                           samples = meta$Subject_ID,

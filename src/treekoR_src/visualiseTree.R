@@ -1,3 +1,4 @@
+library(ggiraph)
 #' Title
 #' @description a function to create a skeleton tree diagram to display
 #' significance testing results on each node
@@ -415,7 +416,7 @@ plotInteractiveHeatmap <- function(testedTree,
                   background-color: white; font: menu;"
     gf <- girafe(
         print(gTree + theme(legend.position = "top") + g1 +
-                  plot_layout(nrow = 1, widths = c(7, 4.5))),
+                  patchwork::plot_layout(nrow = 1, widths = c(7, 4.5))),
         width_svg=svg_width,
         height_svg=svg_height)
 
